@@ -1,0 +1,101 @@
+<project>
+    <!-- default values for each property -->
+    <property name="src-apk" value="app.apk" />
+    <property name="arch" value="arm" />
+    <property name="max" value="yes" />
+    <property name="hotMethod" value="no" />
+    <property name="experimental" value="no" />
+    <property name="export" value="no" />
+
+    <target name="clean">
+        <delete dir="out" />
+        <delete dir="sootOutput" />
+        <delete dir="test-out" />
+    </target>
+
+    <target name="compile-transformer">
+        <mkdir dir="out/production/Transformer" />
+        <javac srcdir="src" destdir="out/production/Transformer" includeantruntime="false" debug="true">
+            <classpath>
+                <pathelement path="lib/soot.jar" />
+                <pathelement path="${user.home}/Android/Sdk/platforms/android-28/android.jar" />
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="test" depends="compile-transformer">
+        <exec executable="${basedir}/test" dir="${basedir}" failonerror="true" />
+    </target>
+
+    <macrodef name="soot">
+        <attribute name="soot-class" default="ch.ethz.rajs.Main" />
+        <attribute name="src-format" default="apk" />
+        <attribute name="src-dir" default="${src-apk}" />
+        <attribute name="target-format" />
+        <attribute name="target-dir" default="sootOutput" />
+	<attribute name="target-arch" default="${arch}" />
+	<attribute name="target-max" default="${max}" />
+	<attribute name="target-hotMethodFile" default="${hotMethod}" />
+	<attribute name="target-experimental" default="${experimental}" />
+	<attribute name="target-export" default="${export}" />
+        <sequential>
+            <java classname="@{soot-class}" fork="true" failonerror="true" maxmemory="10000m" >
+                <jvmarg value="-ea" /> <!-- Enable assertions -->
+		 <arg line="-w -src-prec @{src-format} -f @{target-format} -android-jars ${user.home}/Android/Sdk/platforms -process-multiple-dex -allow-phantom-refs -process-dir '@{src-dir}' -d '@{target-dir}' -arch '@{target-arch}' -max '@{target-max}' -hotMethod '@{target-hotMethodFile}' -exp '@{target-experimental}' -export '@{target-export}'" />	
+		 <classpath>
+                    <pathelement path="lib/soot.jar" />
+                    <pathelement path="out/production/Transformer" />
+                </classpath>
+            </java>
+        </sequential>
+    </macrodef>
+
+    <target name="convert-dex-to-jimple">
+        <mkdir dir="sootOutput/conversion" />
+        <soot soot-class="soot.Main"
+              src-dir="sootOutput/app/classes.dex"
+              src-format="apk"
+              target-dir="sootOutput/conversion"
+              target-format="J" />
+    </target>
+
+    <target name="convert-jimple-to-apk">
+        <mkdir dir="sootOutput/conversion" />
+        <soot soot-class="soot.Main"
+              src-format="J"
+              src-dir="sootOutput"
+	      target-dir="sootOutput/conversion"
+              target-format="dex" />
+    </target>
+
+    <target name="convert-apk-to-jimple">
+        <mkdir dir="sootOutput/conversion" />
+        <soot soot-class="soot.Main"
+              target-format="J"
+              target-dir="sootOutput/conversion" />
+    </target>
+
+    <target name="transform-apk-to-jimple" depends="compile-transformer">
+        <soot target-format="J" />
+    </target>
+
+    <target name="transform-apk-to-apk" depends="compile-transformer">
+        <soot target-format="dex"/>
+    </target>
+
+    <target name="transform-and-install-apk" depends="transform-apk-to-apk">
+        <first id="first">
+            <fileset dir="sootOutput" includes="*.apk" />
+        </first>
+        <exec executable="${basedir}/sign-and-deploy" dir="${basedir}" failonerror="true">
+            <arg value="${toString:first}" />
+        </exec>
+    </target>
+
+    <target name="transform-test-to-jimple" depends="compile-transformer">
+        <exec executable="${basedir}/test" dir="${basedir}" failonerror="true" >
+            <arg value="J" />
+        </exec>
+    </target>
+
+</project>
